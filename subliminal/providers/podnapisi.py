@@ -8,13 +8,12 @@ import xml.etree.ElementTree
 import zipfile
 import babelfish
 import bs4
-import charade
 import guessit
 import requests
 from . import Provider
 from ..exceptions import InvalidSubtitle, ProviderNotAvailable, ProviderError
 from ..subtitle import Subtitle, is_valid_subtitle, compute_guess_matches
-from ..subtitle import sanitize_string, extract_title_year
+from ..subtitle import sanitize_string, extract_title_year, detect
 from ..video import Episode, Movie
 from urllib import quote
 
@@ -256,7 +255,17 @@ class PodnapisiProvider(Provider):
                     releases = [ str(releases['title'].string.strip()), ]
                 else:
                     # store name
-                    releases = [ str(releases.string.strip()), ]
+                    try:
+                        releases = [ str(releases.string.strip()), ]
+                    except UnicodeError:
+                        releases = [
+                            releases.string\
+                                    .decode(detect(
+                                        releases.string,
+                                        language.alpha2)['encoding'],
+                                        'replace',
+                                    ),
+                        ]
 
                 # attempt to match against multi listings (if they exist)
                 multi_release = cells[0].find_all('div', class_='release')
@@ -328,7 +337,8 @@ class PodnapisiProvider(Provider):
             if len(zf.namelist()) > 1:
                 raise ProviderError('More than one file to unzip')
             subtitle_bytes = zf.read(zf.namelist()[0])
-        subtitle_text = subtitle_bytes.decode(charade.detect(subtitle_bytes)['encoding'], 'replace')
+        subtitle_text = subtitle_bytes.decode(
+            detect(subtitle_bytes, subtitle.language.alpha2)['encoding'], 'replace')
         if not is_valid_subtitle(subtitle_text):
             raise InvalidSubtitle
         return subtitle_text
